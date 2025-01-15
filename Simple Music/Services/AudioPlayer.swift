@@ -50,62 +50,73 @@ class AudioPlayer: ObservableObject {
     }
     
     private func setupBackgroundPlayback() {
-#if !os(macOS)
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try AVAudioSession.sharedInstance().setActive(true)
-            
-            // 注册后台播放通知
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(handleInterruption),
-                                                   name: AVAudioSession.interruptionNotification,
-                                                   object: AVAudioSession.sharedInstance())
-            
-            // 注册耳机拔出通知
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(handleRouteChange),
-                                                   name: AVAudioSession.routeChangeNotification,
-                                                   object: AVAudioSession.sharedInstance())
-        } catch {
-            print("Failed to set up background playback: \(error)")
-        }
-#endif
+        // 注册后台播放通知
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleInterruption),
+                                               name: AVAudioSession.interruptionNotification,
+                                               object: AVAudioSession.sharedInstance())
+        
+        // 注册耳机拔出通知
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleRouteChange),
+                                               name: AVAudioSession.routeChangeNotification,
+                                               object: AVAudioSession.sharedInstance())
     }
     
     private func setupRemoteCommandCenter() {
 #if !os(macOS)
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Failed to setup audio session: \(error)")
+        }
+        
         let commandCenter = MPRemoteCommandCenter.shared()
         
+        commandCenter.playCommand.removeTarget(nil)
+        commandCenter.pauseCommand.removeTarget(nil)
+        commandCenter.nextTrackCommand.removeTarget(nil)
+        commandCenter.previousTrackCommand.removeTarget(nil)
+        commandCenter.changePlaybackPositionCommand.removeTarget(nil)
+        
         // 播放/暂停
+        commandCenter.playCommand.isEnabled = true
         commandCenter.playCommand.addTarget { [weak self] _ in
             self?.play()
             return .success
         }
         
+        commandCenter.pauseCommand.isEnabled = true
         commandCenter.pauseCommand.addTarget { [weak self] _ in
             self?.pause()
             return .success
         }
         
         // 下一首
+        commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             self?.playNext()
             return .success
         }
         
         // 上一首
+        commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             self?.playPrevious()
             return .success
         }
         
         // 进度控制
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             if let event = event as? MPChangePlaybackPositionCommandEvent {
                 self?.updateProgress(to: event.positionTime)
             }
             return .success
         }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        UIApplication.shared.beginReceivingRemoteControlEvents()
 #endif
     }
     
